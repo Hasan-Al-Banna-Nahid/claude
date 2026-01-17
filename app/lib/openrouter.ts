@@ -5,35 +5,27 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const AVAILABLE_MODELS = [
   {
-    id: "anthropic/claude-3.5-sonnet",
+    id: "anthropic/claude-3-5-sonnet-20241022",
     name: "Claude 3.5 Sonnet",
     provider: "Anthropic",
     context: 200000,
-    description: "Latest Claude model – fast, strong reasoning",
+    description: "Best Claude model on OpenRouter (recommended)",
     pricing: { input: 3, output: 15 },
   },
   {
-    id: "anthropic/claude-3.5-opus",
-    name: "Claude 3.5 Opus",
+    id: "anthropic/claude-3-opus-20240229",
+    name: "Claude 3 Opus",
     provider: "Anthropic",
     context: 200000,
-    description: "Most capable Claude model",
+    description: "Most powerful Claude (very expensive)",
     pricing: { input: 15, output: 75 },
-  },
-  {
-    id: "anthropic/claude-3-sonnet",
-    name: "Claude 3 Sonnet",
-    provider: "Anthropic",
-    context: 200000,
-    description: "Balanced Claude model",
-    pricing: { input: 3, output: 15 },
   },
   {
     id: "openai/gpt-4.1",
     name: "GPT-4.1",
     provider: "OpenAI",
     context: 128000,
-    description: "Latest GPT-4.1 model",
+    description: "Latest GPT-4.1",
     pricing: { input: 10, output: 30 },
   },
   {
