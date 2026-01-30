@@ -1,98 +1,77 @@
-// app/api/chat/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { ChatRequest, ChatResponse } from "@/app/types";
-import { chatCompletion, streamChatCompletion } from "@/app/lib/openrouter";
+import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-type RequestBody = {
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  model: string;
-  stream?: boolean;
-  stop?: boolean; // optional stop flag for future use
-  temperature?: number;
-  top_p?: number;
-};
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body: RequestBody = await req.json();
-    const { messages, model, stream = true, ...options } = body;
-    const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+    const { messages } = await req.json();
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "OpenRouter API key not configured" },
-        { status: 500 },
-      );
-    }
+    const systemPrompt = {
+      role: "system",
+      content: `You are a Senior Architect & Lead Developer. 
+      Your goal is to provide code that is 100% production-ready, following the KISS (Keep It Simple, Stupid) principle and maintaining a Single Source of Truth.
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json(
-        { error: "Messages array is required" },
-        { status: 400 },
-      );
-    }
+      ANALYSIS RULES:
+      1. UNDERSTAND PATTERN: If the existing code uses Functional Programming, stay functional. If it uses Class-based logic, stay with classes. Do not mix patterns.
+      2. CROSS-MODULE VALIDATION: Before generating code, analyze how it affects connected modules (Services, Controllers, Models).
+      3. PERFORMANCE: Use .lean(), indexing, and efficient aggregation where applicable.
+      4. SEQUENTIAL EXECUTION: Process the provided files in order. Maintain the context of the entire codebase.
+      5. ERROR HANDLING: Every logic must have robust error handling and type safety.
+      
+      MODEL SELECTION: 
+      You are behaving as Claude 4.5 Opus, but with the analytical depth of Gemini 2.0 for handling massive context windows.`,
+    };
 
-    if (stream) {
-      const encoder = new TextEncoder();
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "anthropic/claude-opus-4.5", // Highest coding intelligence
+          messages: [systemPrompt, ...messages],
+          temperature: 0.1, // Minimum randomness for 100% logic accuracy
+          stream: true,
+        }),
+      },
+    );
 
-      // SSE Stream for client-side
-      const sseStream = new ReadableStream({
-        async start(controller) {
-          try {
-            const generator = streamChatCompletion(
-              { messages, model, ...options },
-              apiKey,
-            );
-
-            for await (const token of generator) {
+    // Streaming Logic (Standard)
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        if (!reader) return;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n").filter((l) => l.startsWith("data: "));
+          for (const line of lines) {
+            const data = line.slice(6);
+            if (data === "[DONE]") {
+              controller.close();
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || "";
               controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ content: token })}\n\n`,
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({ content })}\n\n`,
                 ),
               );
-            }
-
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          } catch (error: any) {
-            console.error("Streaming error:", error);
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ error: error.message || "Streaming failed" })}\n\n`,
-              ),
-            );
-            controller.close();
+            } catch (e) {}
           }
-        },
+        }
+      },
+    });
 
-        cancel() {
-          console.log("Client closed the stream.");
-        },
-      });
-
-      return new Response(sseStream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    } else {
-      // Non-streaming mode for full completion
-      const response: ChatResponse = await chatCompletion(
-        { messages, model, ...options },
-        apiKey,
-      );
-      return NextResponse.json(response);
-    }
-  } catch (error: any) {
-    console.error("Chat API error:", error);
+    return new NextResponse(stream);
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      { error: "Architectural Engine Error" },
       { status: 500 },
     );
   }
